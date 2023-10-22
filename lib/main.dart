@@ -2,21 +2,20 @@ import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
+import 'package:wakelock/wakelock.dart';
 
 late List<CameraDescription> _cameras;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
+  Wakelock.enable();
   _cameras = await availableCameras();
   runApp(const MaterialApp(
     home: CameraApp(),
   ));
 }
 
-/// CameraApp is the Main Application.
 class CameraApp extends StatefulWidget {
-  /// Default Constructor
   const CameraApp({super.key});
 
   @override
@@ -26,18 +25,22 @@ class CameraApp extends StatefulWidget {
 class _CameraAppState extends State<CameraApp> {
   late CameraController cameraController;
   late VideoPlayerController videoPlayerController;
-
+  bool back = true;
   XFile? picture;
   XFile? video;
 
   @override
   void initState() {
     super.initState();
-    change(0);
+    change();
   }
 
-  change(int index) {
-    cameraController = CameraController(_cameras[index], ResolutionPreset.max);
+  change() {
+    cameraController = CameraController(
+      _cameras[back ? 0 : 1],
+      ResolutionPreset.max,
+      imageFormatGroup: ImageFormatGroup.jpeg,
+    );
     cameraController.initialize().then((_) {
       if (!mounted) {
         return;
@@ -47,41 +50,17 @@ class _CameraAppState extends State<CameraApp> {
       if (e is CameraException) {
         switch (e.code) {
           case 'CameraAccessDenied':
-            // Handle access errors here.
             break;
           default:
-            // Handle other errors here.
             break;
         }
       }
     });
   }
 
-  videoPlayer(XFile filePath) {
-    print("File Path: ${filePath.path}");
-    videoPlayerController = VideoPlayerController.file(File(filePath.path))
-      ..initialize().then((_) {
-        // Ensure the first frame is shown after the video is initialized, even before the play button has been pressed.
-        setState(() {});
-      });
-  }
-
-  cameraFeatures() {
-    cameraController.enableAudio;
-  }
-
   takePicture() async {
     picture = await cameraController.takePicture();
-    print("Picture: $picture");
     setState(() {});
-  }
-
-  play() async {
-    await videoPlayerController.play();
-  }
-
-  pause() async {
-    await videoPlayerController.pause();
   }
 
   @override
@@ -98,31 +77,15 @@ class _CameraAppState extends State<CameraApp> {
     return SafeArea(
       child: Scaffold(
         floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-        floatingActionButton: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            FloatingActionButton(
-              backgroundColor: Colors.blueGrey,
-              onPressed: () {
-                setState(() {
-                  change(1);
-                });
-              },
-              child: const Text("1:Front"),
-            ),
-            const SizedBox(
-              width: 10,
-            ),
-            FloatingActionButton(
-              backgroundColor: Colors.blueGrey,
-              onPressed: () {
-                setState(() {
-                  change(0);
-                });
-              },
-              child: const Text("0:Back"),
-            ),
-          ],
+        floatingActionButton: FloatingActionButton(
+          backgroundColor: Colors.blueGrey,
+          onPressed: () {
+            setState(() {
+              back = !back;
+              change();
+            });
+          },
+          child: const Text("1:Front"),
         ),
         body: SingleChildScrollView(
           child: Center(
@@ -134,19 +97,16 @@ class _CameraAppState extends State<CameraApp> {
                     ? const Text("Image")
                     : Row(
                         children: [
-                          Image.file(
-                            File(picture!.path),
-                            height: 300,
-                          ),
-                          //Second - > Inverse
+                          autoAdjust(picture!),
+                          const Spacer(),
                           Transform.flip(
-                            flipX: true,
+                            flipX: !back,
                             child: Image.file(
                               File(picture!.path),
                               height: 300,
                               filterQuality: FilterQuality.high,
                             ),
-                          )
+                          ),
                         ],
                       ),
                 ElevatedButton(
@@ -161,6 +121,17 @@ class _CameraAppState extends State<CameraApp> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget autoAdjust(XFile picture) {
+    return Transform.flip(
+      flipX: !back,
+      child: Image.file(
+        File(picture.path),
+        height: 300,
+        filterQuality: FilterQuality.high,
       ),
     );
   }
